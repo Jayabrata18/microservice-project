@@ -1,0 +1,60 @@
+
+
+name: Deploy on QA
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  deploy_on_qa:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Source Code
+      uses: actions/checkout@v2
+      
+    - name: Create Customer Env file
+      working-directory: ./customer
+      run: |
+         touch .env
+         echo APP_SECRET='microservice_secret' >> .env
+         echo DB_URI='mongodb+srv://jayabrata:12345@cluster0.rpwkd1f.mongodb.net/' >> .env
+         echo EXCHANGE_NAME= 'ONLINE_STORE' >> .env
+         echo PORT=8003 >> .env
+         cat .env
+    - name: Create Products Env file
+      working-directory: ./products
+      run: |
+         touch .env
+         echo APP_SECRET='microservice_secret' >> .env
+         echo DB_URI='mongodb+srv://jayabrata:12345@cluster0.kin0jof.mongodb.net/' >> .env
+         echo EXCHANGE_NAME= 'ONLINE_STORE' >> .env
+         echo PORT=8002 >> .env
+         cat .env     
+         
+    - name: Create Shooping Env file
+      working-directory: ./shopping
+      run: |
+         touch .env
+         echo APP_SECRET='microservice_secret' >> .env
+         echo DB_URI='mongodb+srv://jayabrata:12345@cluster0.brnpdyk.mongodb.net/' >> .env
+         echo EXCHANGE_NAME= 'ONLINE_STORE' >> .env
+         echo PORT=8001 >> .env
+         cat .env          
+         
+    - name: Generate deployment package
+      run: |
+          zip -r deploy.zip . -x '*.git'
+#     - name: Deploy on Elastic beanstaik QA Env
+#       uses: einaregilsson/beanstalk-deploy@20
+#       with:
+#          aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
+#          aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+#          application_name: microservice-project
+#          enviorment_name: Microservice-project-env
+#          version_label: "ver-${{github.sha}}"
+#          region: ap-south-1
+#          deployment_package: deploy.zip
