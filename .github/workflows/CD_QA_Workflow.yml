@@ -57,7 +57,7 @@ jobs:
           aws_access_key: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws_secret_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           application_name: Microservice-ecommerce-project
-          environment_name: Microservice-ecommerce-project-env
+          environment_name: Microservice-ecommerce-project-env-1
           version_label: "ver-${{ github.sha }}"
           region: ap-south-1
           deployment_package: deploy.zip
