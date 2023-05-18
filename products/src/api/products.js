@@ -1,14 +1,12 @@
 const { CUSTOMER_SERVICE, SHOPPING_SERVICE } = require("../config");
 const ProductService = require("../services/product-service");
-const {
-  PublishCustomerEvent,
-  PublishShoppingEvent,
-  PublishMessage,
-} = require("../utils");
+const { RPCObserver } = require("../utils");
 const UserAuth = require("./middlewares/auth");
 
 module.exports = (app, channel) => {
   const service = new ProductService();
+
+  RPCObserver("PRODUCT_RPC", service);
 
   app.post("/product/create", async (req, res, next) => {
     const { name, desc, type, unit, price, available, suplier, banner } =

@@ -1,22 +1,23 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const amqplib = require("amqplib");
-
+const { v4: uuid4 } = require("uuid");
 const {
   APP_SECRET,
   BASE_URL,
   EXCHANGE_NAME,
-  MESSAGE_BROKER_URL,
+  MSG_QUEUE_URL,
 } = require("../config");
 
-//Utility functions
-module.exports.GenerateSalt = async () => {
-  return await bcrypt.genSalt();
-};
+let amqplibConnection = null;
 
-module.exports.GeneratePassword = async (password, salt) => {
-  return await bcrypt.hash(password, salt);
-};
+//Utility functions
+(module.exports.GenerateSalt = async () => {
+  return await bcrypt.genSalt();
+}),
+  (module.exports.GeneratePassword = async (password, salt) => {
+    return await bcrypt.hash(password, salt);
+  });
 
 module.exports.ValidatePassword = async (
   enteredPassword,
@@ -26,27 +27,20 @@ module.exports.ValidatePassword = async (
   return (await this.GeneratePassword(enteredPassword, salt)) === savedPassword;
 };
 
-module.exports.GenerateSignature = async (payload) => {
-  try {
-    return await jwt.sign(payload, APP_SECRET, { expiresIn: "30d" });
-  } catch (error) {
-    console.log(error);
-    return error;
-  }
-};
-
-module.exports.ValidateSignature = async (req) => {
-  try {
+(module.exports.GenerateSignature = async (payload) => {
+  return await jwt.sign(payload, APP_SECRET, { expiresIn: "1d" });
+}),
+  (module.exports.ValidateSignature = async (req) => {
     const signature = req.get("Authorization");
-    console.log(signature);
-    const payload = await jwt.verify(signature.split(" ")[1], APP_SECRET);
-    req.user = payload;
-    return true;
-  } catch (error) {
-    console.log(error);
+
+    if (signature) {
+      const payload = await jwt.verify(signature.split(" ")[1], APP_SECRET);
+      req.user = payload;
+      return true;
+    }
+
     return false;
-  }
-};
+  });
 
 module.exports.FormateData = (data) => {
   if (data) {
@@ -56,37 +50,54 @@ module.exports.FormateData = (data) => {
   }
 };
 
-// Message Broker
+//Message Broker
+const getChannel = async () => {
+  if (amqplibConnection === null) {
+    amqplibConnection = await amqplib.connect(MSG_QUEUE_URL);
+  }
+  return await amqplibConnection.createChannel();
+};
 
-//create a channel
 module.exports.CreateChannel = async () => {
   try {
-    const connection = await amqplib.connect(MESSAGE_BROKER_URL);
-    const channel = await connection.createChannel();
-    await channel.assertExchange(EXCHANGE_NAME, "direct", false);
+    const channel = await getChannel();
+    await channel.assertQueue(EXCHANGE_NAME, "direct", { durable: true });
     return channel;
   } catch (err) {
     throw err;
   }
 };
 
-//publish channel
-module.exports.PublishMessage = (channel, binding_key, message) => {
-  try {
-    channel.publish(EXCHANGE_NAME, binding_key, Buffer.from(message));
-  } catch (err) {
-    throw err;
-  }
+module.exports.PublishMessage = (channel, service, msg) => {
+  channel.publish(EXCHANGE_NAME, service, Buffer.from(msg));
+  console.log("Sent: ", msg);
 };
 
-//subscribe channel
-module.exports.SubscribeMessage = async(channel, service, binding_key) => {
-  const appQueue = await channel.assertQueue(QUEUE_NAME);
-  channel.bindQueue(appQueue.queue, EXCHANGE_NAME, binding_key);
-
-  channel.consume(appQueue.queue, (data) => {
-    console.log("receved data");
-    console.log(data.connect.toString());
-    channel.ack(data);
+module.exports.RPCObserver = async (RPC_QUEUE_NAME, service) => {
+  const channel = await getChannel();
+  await channel.assertQueue(RPC_QUEUE_NAME, {
+    durable: false,
   });
+  channel.prefetch(1);
+  channel.consume(
+    RPC_QUEUE_NAME,
+    async (msg) => {
+      if (msg.content) {
+        // DB Operation
+        const payload = JSON.parse(msg.content.toString());
+        const response = await service.serveRPCRequest(payload);
+        channel.sendToQueue(
+          msg.properties.replyTo,
+          Buffer.from(JSON.stringify(response)),
+          {
+            correlationId: msg.properties.correlationId,
+          }
+        );
+        channel.ack(msg);
+      }
+    },
+    {
+      noAck: false,
+    }
+  );
 };
