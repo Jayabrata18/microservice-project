@@ -1,7 +1,7 @@
 {
   "name": "products",
   "version": "1.0.0",
-  "description": "part of microservice",
+  "description": "products part of microservice",
   "main": "app.js",
   "scripts": {
     "start": "nodemon src/server.js",
